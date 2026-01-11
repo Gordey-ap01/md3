@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>МЕБЕЛЬДОМ | Один салон — несколько фабрик</title>
@@ -167,13 +166,13 @@
         <div class="relative z-10 container mx-auto px-4 text-center mt-12">
             <div class="inline-block mb-6">
                 <span class="text-gold-400 uppercase tracking-[0.4em] text-[10px] font-black border border-gold-400/30 px-4 py-2 bg-black/20 backdrop-blur-sm rounded-sm">
-                    Premium Quality Furniture
+                    Комсомольск-на-Амуре
                 </span>
             </div>
             
             <h1 class="text-3xl md:text-5xl lg:text-6xl font-serif text-white mb-8 leading-tight max-w-5xl mx-auto">
                 Один салон — несколько фабрик: <br> 
-                <span class="italic text-stone-300 text-xl md:text-3xl lg:text-4xl block mt-4 font-light opacity-90">
+                <span class="italic text-gold-400 text-xl md:text-3xl lg:text-4xl block mt-4 font-light opacity-90">
                     от простой тумбочки до сложной кухни в элитном стиле
                 </span>
             </h1>
@@ -202,7 +201,7 @@
             </div>
 
             <div id="products-grid" class="grid grid-cols-1 md:grid-cols-3 gap-8">
-                <!-- Карточки будут загружены через JS, но вот пример заглушек для надежности -->
+                <!-- Карточки будут загружены через JS -->
                 <div class="animate-pulse bg-wood-800 h-80 rounded-sm"></div>
                 <div class="animate-pulse bg-wood-800 h-80 rounded-sm"></div>
                 <div class="animate-pulse bg-wood-800 h-80 rounded-sm"></div>
@@ -326,51 +325,79 @@
         </div>
     </footer>
 
-    <!-- Firebase & Logic (Оставлен для функционала) -->
+    <!-- Firebase & Logic (ОБНОВЛЕНО ДЛЯ РАБОТЫ БЕЗ СЕРВЕРА) -->
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
         import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
-        // Конфигурация Firebase
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-
+        // --- ВАЖНОЕ ИСПРАВЛЕНИЕ ДЛЯ ХОСТИНГА ---
+        // Проверяем, есть ли конфиг Firebase (в Immersive он есть, на хостинге - нет)
+        const isDemoMode = typeof __firebase_config === 'undefined';
+        
+        let db = null;
+        let auth = null;
         let user = null;
+        let appId = 'demo-app';
 
-        const initAuth = async () => {
-             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                await signInWithCustomToken(auth, __initial_auth_token);
-             } else {
-                await signInAnonymously(auth);
-             }
-        };
-        initAuth();
+        async function initApp() {
+            if (!isDemoMode) {
+                // Если мы в Immersive - грузим реальный Firebase
+                const firebaseConfig = JSON.parse(__firebase_config);
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
-        onAuthStateChanged(auth, (u) => {
-            user = u;
-            if(u) { loadProducts(); initQuiz(); }
-        });
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
 
-        // Загрузка товаров
+                onAuthStateChanged(auth, (u) => {
+                    user = u;
+                    if(u) { 
+                        loadProducts(); 
+                        initQuiz(); 
+                    }
+                });
+            } else {
+                // ДЕМО РЕЖИМ (Работает везде)
+                console.log("Запущен демо-режим (без бэкенда)");
+                user = { uid: 'demo-user', isAnonymous: true };
+                // Имитируем задержку сети для реалистичности
+                setTimeout(() => {
+                    loadProducts();
+                    initQuiz();
+                }, 500);
+            }
+        }
+        
+        initApp();
+
+        // Загрузка товаров (С поддержкой Демо)
         function loadProducts() {
             const productsGrid = document.getElementById('products-grid');
-            const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'products_v4'), orderBy('createdAt', 'desc'));
+            const defaultItems = [
+                {title: 'Кухня "Onyx Premium"', price: 'от 220 000 ₽', image: 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&q=80&w=800'},
+                {title: 'Шкаф "Loft Wood"', price: 'от 65 000 ₽', image: 'https://images.unsplash.com/photo-1595428774223-ef52624120d2?auto=format&fit=crop&q=80&w=800'},
+                {title: 'Гардеробная "Gold Line"', price: 'от 140 000 ₽', image: 'https://images.unsplash.com/photo-1558603668-6570496b66f8?auto=format&fit=crop&q=80&w=800'}
+            ];
+
+            if (!isDemoMode && db) {
+                // Реальная загрузка
+                const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'products_v4'), orderBy('createdAt', 'desc'));
+                onSnapshot(q, (snapshot) => {
+                    renderItems(snapshot.empty ? defaultItems : snapshot.docs.map(d => d.data()));
+                });
+            } else {
+                // Демо загрузка
+                renderItems(defaultItems);
+            }
             
-            onSnapshot(q, (snapshot) => {
+            function renderItems(items) {
                 productsGrid.innerHTML = '';
-                // Данные по умолчанию, если база пуста или не прогрузилась
-                const defaultItems = [
-                    {title: 'Кухня "Onyx Premium"', price: 'от 220 000 ₽', image: 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&q=80&w=800'},
-                    {title: 'Шкаф "Loft Wood"', price: 'от 65 000 ₽', image: 'https://images.unsplash.com/photo-1595428774223-ef52624120d2?auto=format&fit=crop&q=80&w=800'},
-                    {title: 'Гардеробная "Gold Line"', price: 'от 140 000 ₽', image: 'https://images.unsplash.com/photo-1558603668-6570496b66f8?auto=format&fit=crop&q=80&w=800'}
-                ];
-
-                const items = snapshot.empty ? defaultItems : snapshot.docs.map(d => d.data());
-
                 items.forEach(data => {
                     const div = document.createElement('div');
                     div.className = 'group bg-wood-800 border border-white/5 hover:border-gold-400/30 transition-all duration-500 rounded-sm overflow-hidden';
@@ -391,10 +418,8 @@
                     `;
                     productsGrid.appendChild(div);
                 });
-                
-                // Важно: обновляем иконки после рендера товаров
-                setTimeout(() => lucide.createIcons(), 500);
-            });
+                setTimeout(() => lucide.createIcons(), 200);
+            }
         }
 
         // Логика Квиза
@@ -451,7 +476,6 @@
                     </div>
                 `;
             }
-            // Обновляем иконки при каждом шаге
             setTimeout(() => lucide.createIcons(), 100);
         }
 
@@ -465,11 +489,15 @@
             e.preventDefault();
             answers.phone = document.getElementById('q-phone').value;
             try {
-                if(user) {
+                if(!isDemoMode && user) {
                     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'leads_v4'), {
                         ...answers, createdAt: serverTimestamp()
                     });
+                } else {
+                    // Демо отправка
+                    console.log("Заявка (Демо):", answers);
                 }
+                
                 quizContainer.innerHTML = `
                     <div class="text-center py-10">
                         <h4 class="text-3xl font-serif text-gold-400 mb-4 italic">Спасибо!</h4>
@@ -480,10 +508,7 @@
             } catch(err) { console.error(err); }
         };
 
-        // Глобальная инициализация иконок
         window.lucide = lucide; 
-        
-        // Запуск иконок после полной загрузки страницы
         if (document.readyState === 'loading') {  
             document.addEventListener('DOMContentLoaded', () => lucide.createIcons());
         } else {  
@@ -491,5 +516,4 @@
         }
     </script>
 </body>
-
 </html>
